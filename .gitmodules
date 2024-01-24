@@ -1,6 +1,6 @@
 [submodule "bukkit"]
 	path = bukkit
-	url = https://github.com/KweezyCode/KwCoreBukkit
+	url = https://github.com/KweezyCode/KwCoreBukkit.git
 [submodule "craftbukkit"]
 	path = craftbukkit
-	url = https://github.com/KweezyCode/KwCoreCraftBukkit
+	url = https://github.com/KweezyCode/KwCoreCraftBukkit.git
