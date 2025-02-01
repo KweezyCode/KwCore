@@ -1,0 +1,89 @@
+From 723061f0e0fbd1a7ba1b1fcfb46059e38f64c93c Mon Sep 17 00:00:00 2001
+From: KweezyCode <unknown2w+github@gmail.com>
+Date: Sun, 5 Jan 2025 22:27:17 +0300
+Subject: [PATCH] =?UTF-8?q?=D0=9F=D0=B5=D1=80=D0=B2=D1=8B=D0=B9=20=D1=80?=
+ =?UTF-8?q?=D0=B5=D0=BB=D0=B8=D0=B7?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ .../org/bukkit/command/SimpleCommandMap.java  |  1 +
+ .../bukkit/command/defaults/ListCommand.java  |  2 +-
+ .../command/defaults/ShowCoordsCommand.java   | 39 +++++++++++++++++++
+ 3 files changed, 41 insertions(+), 1 deletion(-)
+ create mode 100644 src/main/java/org/bukkit/command/defaults/ShowCoordsCommand.java
+
+diff --git a/src/main/java/org/bukkit/command/SimpleCommandMap.java b/src/main/java/org/bukkit/command/SimpleCommandMap.java
+index df5f6ef1..b988bfe5 100644
+--- a/src/main/java/org/bukkit/command/SimpleCommandMap.java
++++ b/src/main/java/org/bukkit/command/SimpleCommandMap.java
+@@ -35,6 +35,7 @@ public class SimpleCommandMap implements CommandMap {
+         fallbackCommands.add(new PardonCommand());
+         fallbackCommands.add(new KickCommand());
+         fallbackCommands.add(new TeleportCommand());
++        fallbackCommands.add(new ShowCoordsCommand());
+         fallbackCommands.add(new GiveCommand());
+         fallbackCommands.add(new TimeCommand());
+         fallbackCommands.add(new SayCommand());
+diff --git a/src/main/java/org/bukkit/command/defaults/ListCommand.java b/src/main/java/org/bukkit/command/defaults/ListCommand.java
+index 80c6135a..4ed21853 100644
+--- a/src/main/java/org/bukkit/command/defaults/ListCommand.java
++++ b/src/main/java/org/bukkit/command/defaults/ListCommand.java
+@@ -34,7 +34,7 @@ public class ListCommand extends VanillaCommand {
+                 online.append(", ");
+             }
+ 
+-            online.append(player.getDisplayName());
++            online.append(player.getName());
+         }
+ 
+         sender.sendMessage("There are " + players.length + "/" + Bukkit.getMaxPlayers() + " players online:\n" + online.toString());
+diff --git a/src/main/java/org/bukkit/command/defaults/ShowCoordsCommand.java b/src/main/java/org/bukkit/command/defaults/ShowCoordsCommand.java
+new file mode 100644
+index 00000000..40ea30e8
+--- /dev/null
++++ b/src/main/java/org/bukkit/command/defaults/ShowCoordsCommand.java
+@@ -0,0 +1,39 @@
++package org.bukkit.command.defaults;
++
++import java.util.List;
++
++import org.apache.commons.lang.Validate;
++import org.bukkit.Bukkit;
++import org.bukkit.ChatColor;
++import org.bukkit.Location;
++import org.bukkit.command.Command;
++import org.bukkit.command.CommandSender;
++import org.bukkit.entity.Player;
++import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
++
++import com.google.common.collect.ImmutableList;
++
++public class ShowCoordsCommand extends VanillaCommand {
++
++    public ShowCoordsCommand() {
++        super("showcoords");
++        this.description = "";
++        this.usageMessage = "";
++        this.setPermission("bukkit.command.showcoords");
++    }
++
++    @Override
++    public boolean execute(CommandSender sender, String currentAlias, String[] args) {
++        if (!testPermission(sender)) return true;
++        for (Player p : Bukkit.getOnlinePlayers()) {
++            sender.sendMessage(p.getName() + " is at " + p.getLocation().getBlockX() + ", " + p.getLocation().getBlockY() + ", " + p.getLocation().getBlockZ());
++        }
++        return true;
++    }
++
++
++    @Override
++    public List<String> tabComplete(CommandSender sender, String alias, String[] args) throws IllegalArgumentException {
++        return ImmutableList.of();
++    }
++}
+-- 
+2.47.1
+

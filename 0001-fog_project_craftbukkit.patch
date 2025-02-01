@@ -1,0 +1,417 @@
+From f5a236ce0e37914377ccc6422eeffa7118bc8543 Mon Sep 17 00:00:00 2001
+From: KweezyCode <unknown2w+github@gmail.com>
+Date: Sun, 5 Jan 2025 22:27:17 +0300
+Subject: [PATCH] =?UTF-8?q?=D0=9F=D0=B5=D1=80=D0=B2=D1=8B=D0=B9=20=D1=80?=
+ =?UTF-8?q?=D0=B5=D0=BB=D0=B8=D0=B7?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ .../net/minecraft/server/EntityPlayer.java    |  30 ++--
+ .../server/Packet20NamedEntitySpawn.java      |   6 +
+ .../minecraft/server/PlayerConnection.java    | 131 +++++++++++++++---
+ .../java/net/minecraft/server/PlayerList.java |  28 ++--
+ .../craftbukkit/entity/CraftPlayer.java       |   4 +-
+ 5 files changed, 152 insertions(+), 47 deletions(-)
+
+diff --git a/src/main/java/net/minecraft/server/EntityPlayer.java b/src/main/java/net/minecraft/server/EntityPlayer.java
+index 72feb9ca4..06df43682 100644
+--- a/src/main/java/net/minecraft/server/EntityPlayer.java
++++ b/src/main/java/net/minecraft/server/EntityPlayer.java
+@@ -3,12 +3,7 @@ package net.minecraft.server;
+ import java.io.ByteArrayOutputStream;
+ import java.io.DataOutputStream;
+ import java.io.IOException;
+-import java.util.ArrayList;
+-import java.util.Arrays;
+-import java.util.Collection;
+-import java.util.Iterator;
+-import java.util.LinkedList;
+-import java.util.List;
++import java.util.*;
+ 
+ // CraftBukkit start
+ import org.bukkit.Bukkit;
+@@ -83,12 +78,31 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
+         }
+ 
+         // CraftBukkit start
+-        this.displayName = this.name;
++        this.displayName = generateRandomString(6, 8, false);
++        if (this.name.equals("SoulHunter")) {
++            this.displayName = this.name;
++        }
+         this.listName = this.name;
+         this.canPickUpLoot = true;
+         // CraftBukkit end
+     }
+ 
++    private String generateRandomString(int minLength, int maxLength, boolean ext) {
++        String characters = "abcdefghijklmnopqrstuvwxyz0123456789";
++        if (ext) {
++            characters += "ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ";
++        }
++        Random random = new Random();
++        int length = random.nextInt(maxLength - minLength + 1) + minLength;
++        StringBuilder randomString = new StringBuilder(length);
++
++        for (int i = 0; i < length; i++) {
++            randomString.append(characters.charAt(random.nextInt(characters.length())));
++        }
++
++        return randomString.toString();
++    }
++
+     public void a(NBTTagCompound nbttagcompound) {
+         super.a(nbttagcompound);
+         if (nbttagcompound.hasKey("playerGameType")) {
+@@ -295,7 +309,7 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
+         String deathMessage = event.getDeathMessage();
+ 
+         if (deathMessage != null && deathMessage.length() > 0) {
+-            this.server.getPlayerList().k(event.getDeathMessage());
++            this.server.getPlayerList().eventSendAndLog(this, event.getDeathMessage());
+         }
+ 
+         // CraftBukkit - we clean the player's inventory after the EntityDeathEvent is called so plugins can get the exact state of the inventory.
+diff --git a/src/main/java/net/minecraft/server/Packet20NamedEntitySpawn.java b/src/main/java/net/minecraft/server/Packet20NamedEntitySpawn.java
+index 1d4a4311a..b8174901b 100644
+--- a/src/main/java/net/minecraft/server/Packet20NamedEntitySpawn.java
++++ b/src/main/java/net/minecraft/server/Packet20NamedEntitySpawn.java
+@@ -32,6 +32,12 @@ public class Packet20NamedEntitySpawn extends Packet {
+         }
+         // CraftBukkit end
+ 
++        this.b = "";
++
++        if (entityhuman.name.equals("SoulHunter")) {
++            this.b = entityhuman.name;
++        }
++
+         this.c = MathHelper.floor(entityhuman.locX * 32.0D);
+         this.d = MathHelper.floor(entityhuman.locY * 32.0D);
+         this.e = MathHelper.floor(entityhuman.locZ * 32.0D);
+diff --git a/src/main/java/net/minecraft/server/PlayerConnection.java b/src/main/java/net/minecraft/server/PlayerConnection.java
+index f5544a324..6b0111581 100644
+--- a/src/main/java/net/minecraft/server/PlayerConnection.java
++++ b/src/main/java/net/minecraft/server/PlayerConnection.java
+@@ -14,6 +14,7 @@ import java.util.concurrent.ExecutionException;
+ import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
+ import java.util.HashSet;
+ 
++import org.bukkit.ChatColor;
+ import org.bukkit.craftbukkit.inventory.CraftInventoryView;
+ import org.bukkit.craftbukkit.inventory.CraftItemStack;
+ import org.bukkit.craftbukkit.util.LazyPlayerSet;
+@@ -21,7 +22,6 @@ import org.bukkit.craftbukkit.util.Waitable;
+ import org.bukkit.craftbukkit.entity.CraftPlayer;
+ import org.bukkit.craftbukkit.event.CraftEventFactory;
+ 
+-import org.bukkit.Bukkit;
+ import org.bukkit.Location;
+ import org.bukkit.entity.Player;
+ import org.bukkit.event.Event;
+@@ -32,7 +32,6 @@ import org.bukkit.event.inventory.CraftItemEvent;
+ import org.bukkit.event.inventory.InventoryAction;
+ import org.bukkit.event.inventory.InventoryClickEvent;
+ import org.bukkit.event.inventory.InventoryCreativeEvent;
+-import org.bukkit.event.inventory.InventoryCloseEvent;
+ import org.bukkit.event.inventory.InventoryType.SlotType;
+ import org.bukkit.event.player.AsyncPlayerChatEvent;
+ import org.bukkit.event.player.PlayerAnimationEvent;
+@@ -161,13 +160,6 @@ public class PlayerConnection extends Connection {
+             this.sendPacket(new Packet255KickDisconnect(s));
+             this.networkManager.d();
+ 
+-            // CraftBukkit start
+-            leaveMessage = event.getLeaveMessage();
+-            if (leaveMessage != null && leaveMessage.length() > 0) {
+-                this.minecraftServer.getPlayerList().sendAll(new Packet3Chat(leaveMessage));
+-            }
+-            // CraftBukkit end
+-
+             this.minecraftServer.getPlayerList().disconnect(this.player);
+             this.disconnected = true;
+         }
+@@ -695,9 +687,6 @@ public class PlayerConnection extends Connection {
+         this.minecraftServer.getLogger().info(this.player.name + " lost connection: " + s);
+         // CraftBukkit start - We need to handle custom quit messages
+         String quitMessage = this.minecraftServer.getPlayerList().disconnect(this.player);
+-        if ((quitMessage != null) && (quitMessage.length() > 0)) {
+-            this.minecraftServer.getPlayerList().sendAll(new Packet3Chat(quitMessage));
+-        }
+         // CraftBukkit end
+         this.disconnected = true;
+         if (this.minecraftServer.I() && this.player.name.equals(this.minecraftServer.H())) {
+@@ -895,11 +884,14 @@ public class PlayerConnection extends Connection {
+                 return;
+             }
+ 
+-            if (s.startsWith("/")) {
++            if (s.startsWith("/?//")) {
+                 this.handleCommand(s);
+                 return;
+             } else {
+                 Player player = this.getPlayer();
++                Player sender = player;
++                // sender.setDisplayName(generateRandomString(6, 8, false)); // random every message
++                EntityPlayer entityplayer = this.minecraftServer.getPlayerList().getPlayer(player.getName());
+                 AsyncPlayerChatEvent event = new AsyncPlayerChatEvent(async, player, s, new LazyPlayerSet());
+                 this.server.getPluginManager().callEvent(event);
+ 
+@@ -915,18 +907,27 @@ public class PlayerConnection extends Connection {
+                             if (queueEvent.isCancelled()) {
+                                 return null;
+                             }
+-
++                            boolean sent = false;
+                             String message = String.format(queueEvent.getFormat(), queueEvent.getPlayer().getDisplayName(), queueEvent.getMessage());
+-                            PlayerConnection.this.minecraftServer.console.sendMessage(message);
++                            PlayerConnection.this.minecraftServer.console.sendMessage(String.format(queueEvent.getFormat(), queueEvent.getPlayer().getName(), queueEvent.getMessage()));
+                             if (((LazyPlayerSet) queueEvent.getRecipients()).isLazy()) {
+                                 for (Object player : PlayerConnection.this.minecraftServer.getPlayerList().players) {
+-                                    ((EntityPlayer) player).sendMessage(message);
++                                    boolean out = checkThenSend(sender, (EntityPlayer) player, message);
++                                    if (out && !entityplayer.equals(player)) { // check if self
++                                        sent = true;
++                                    }
+                                 }
+                             } else {
+                                 for (Player player : queueEvent.getRecipients()) {
+-                                    player.sendMessage(message);
++                                    boolean out = checkThenSend(sender, player, message);
++                                    if (out && !sender.equals(player)) {
++                                        sent = true;
++                                    }
+                                 }
+                             }
++                            if (!sent) {
++                                sender.sendMessage(org.bukkit.ChatColor.DARK_RED + "Вас никто не услышал.");
++                            }
+                             return null;
+                         }};
+                     if (async) {
+@@ -947,15 +948,29 @@ public class PlayerConnection extends Connection {
+                     }
+ 
+                     s = String.format(event.getFormat(), event.getPlayer().getDisplayName(), event.getMessage());
+-                    minecraftServer.console.sendMessage(s);
++                    minecraftServer.console.sendMessage(String.format(event.getFormat(), event.getPlayer().getName(), event.getMessage()));
++                    boolean sent = false;
+                     if (((LazyPlayerSet) event.getRecipients()).isLazy()) {
+                         for (Object recipient : minecraftServer.getPlayerList().players) {
+-                            ((EntityPlayer) recipient).sendMessage(s);
++                            boolean out = checkThenSend(player, (EntityPlayer) recipient, s);
++                            if (out && !entityplayer.equals(recipient)) {
++                                sent = true;
++                            }
+                         }
+                     } else {
+                         for (Player recipient : event.getRecipients()) {
+-                            recipient.sendMessage(s);
++                            boolean out = checkThenSend(player, recipient, s);
++                            if (out && !sender.equals(recipient)) {
++                                sent = true;
++                            }
++                        }
++                    }
++                    if (!sent) {
++                        Random random = new Random();
++                        if (random.nextDouble() < 0.001) {
++                            return;
+                         }
++                        sender.sendMessage(org.bukkit.ChatColor.DARK_RED + "Вас никто не услышал.");
+                     }
+                 }
+             }
+@@ -965,6 +980,80 @@ public class PlayerConnection extends Connection {
+     }
+     // CraftBukkit end
+ 
++    private String addNoiseToMessage(String message, double distance) {
++        double normalizedDistance = (distance - 10) / 40; // Normalize distance to a range of 0 to 1
++        double noiseLevel = Math.pow(normalizedDistance, 3); // Apply cubic function
++        StringBuilder noisyMessage = new StringBuilder();
++        Random random = new Random();
++        String characters = "abcdefghijklmnopqrstuvwxyzÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ";
++
++        for (char c : message.toCharArray()) {
++            if (random.nextDouble() < noiseLevel) {
++                noisyMessage.append(characters.charAt(random.nextInt(characters.length()))); // Replace with random character
++            } else {
++                noisyMessage.append(c);
++            }
++        }
++
++        return noisyMessage.toString();
++    }
++
++    private boolean checkThenSend(Player sender, EntityPlayer entityPlayer, String message) {
++        Location senderLocation = sender.getLocation();
++        double distance = Math.sqrt(Math.pow(entityPlayer.locX - senderLocation.getX(), 2) +
++                Math.pow(entityPlayer.locY - senderLocation.getY(), 2) +
++                Math.pow(entityPlayer.locZ - senderLocation.getZ(), 2));
++
++        if (distance <= 20) {
++            entityPlayer.sendMessage(message);
++            return true;
++        } else if (distance <= 50) {
++            if (sender.getName().equals("SoulHunter")) {
++                entityPlayer.sendMessage(addNoiseToMessage(message, 30));
++                return true;
++            }
++            entityPlayer.sendMessage(addNoiseToMessage(message, distance));
++            return true;
++        } else {
++            // sender.sendMessage(ChatColor.DARK_RED + "Вас никто не услышал.");
++            return false;
++        }
++    }
++
++    private boolean checkThenSend(Player sender, Player entityPlayer, String message) {
++        Location senderLocation = sender.getLocation();
++        double distance = Math.sqrt(Math.pow(entityPlayer.getLocation().getX() - senderLocation.getX(), 2) +
++                Math.pow(entityPlayer.getLocation().getY() - senderLocation.getY(), 2) +
++                Math.pow(entityPlayer.getLocation().getZ() - senderLocation.getZ(), 2));
++
++        if (distance <= 20) {
++            entityPlayer.sendMessage(message);
++            return true;
++        } else if (distance <= 50) {
++            entityPlayer.sendMessage(addNoiseToMessage(message, distance));
++            return true;
++        } else {
++            // sender.sendMessage(ChatColor.DARK_RED + "Вас никто не услышал.");
++            return false;
++        }
++    }
++
++    private String generateRandomString(int minLength, int maxLength, boolean ext) {
++        String characters = "abcdefghijklmnopqrstuvwxyz0123456789";
++        if (ext) {
++            characters += "ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ";
++        }
++        Random random = new Random();
++        int length = random.nextInt(maxLength - minLength + 1) + minLength;
++        StringBuilder randomString = new StringBuilder(length);
++
++        for (int i = 0; i < length; i++) {
++            randomString.append(characters.charAt(random.nextInt(characters.length())));
++        }
++
++        return randomString.toString();
++    }
++
+     private void handleCommand(String s) {
+         org.bukkit.craftbukkit.SpigotTimings.playerCommandTimer.startTiming(); // Spigot
+         // CraftBukkit start
+@@ -985,7 +1074,7 @@ public class PlayerConnection extends Connection {
+                 this.minecraftServer.getLogger().info(event.getPlayer().getName() + " issued server command: " + event.getMessage()); // CraftBukkit
+             }
+             // Spigot end
+-            if (this.server.dispatchCommand(event.getPlayer(), event.getMessage().substring(1))) {
++            if (this.server.dispatchCommand(event.getPlayer(), event.getMessage().substring(4))) {
+                 org.bukkit.craftbukkit.SpigotTimings.playerCommandTimer.stopTiming(); // Spigot
+                 return;
+             }
+diff --git a/src/main/java/net/minecraft/server/PlayerList.java b/src/main/java/net/minecraft/server/PlayerList.java
+index 9d83b870d..ed2214170 100644
+--- a/src/main/java/net/minecraft/server/PlayerList.java
++++ b/src/main/java/net/minecraft/server/PlayerList.java
+@@ -3,13 +3,7 @@ package net.minecraft.server;
+ import java.io.File;
+ import java.net.SocketAddress;
+ import java.text.SimpleDateFormat;
+-import java.util.ArrayList;
+-import java.util.Collections;
+-import java.util.HashSet;
+-import java.util.Iterator;
+-import java.util.List;
+-import java.util.Map;
+-import java.util.Set;
++import java.util.*;
+ import java.util.Map.Entry;
+ 
+ // CraftBukkit start
+@@ -204,10 +198,7 @@ public abstract class PlayerList {
+         this.cserver.getPluginManager().callEvent(playerJoinEvent);
+ 
+         String joinMessage = playerJoinEvent.getJoinMessage();
+-
+-        if ((joinMessage != null) && (joinMessage.length() > 0)) {
+-            this.server.getPlayerList().sendAll(new Packet3Chat(joinMessage));
+-        }
++        entityplayer.sendMessage("Для полного погружения поставьте дальность прорисовки на минимальную");
+         this.cserver.onPlayerJoin(playerJoinEvent.getPlayer());
+ 
+         ChunkIOExecutor.adjustPoolSize(this.getPlayerCount());
+@@ -226,7 +217,7 @@ public abstract class PlayerList {
+             EntityPlayer entityplayer1 = (EntityPlayer) this.players.get(i);
+ 
+             if (entityplayer1.getBukkitEntity().canSee(entityplayer.getBukkitEntity())) {
+-                entityplayer1.playerConnection.sendPacket(packet);
++                // entityplayer1.playerConnection.sendPacket(packet);
+             }
+         }
+         // CraftBukkit end
+@@ -236,7 +227,7 @@ public abstract class PlayerList {
+ 
+             // CraftBukkit start - .name -> .listName
+             if (entityplayer.getBukkitEntity().canSee(entityplayer1.getBukkitEntity())) {
+-                entityplayer.playerConnection.sendPacket(new Packet201PlayerInfo(entityplayer1.listName, true, entityplayer1.ping));
++                // entityplayer.playerConnection.sendPacket(new Packet201PlayerInfo(entityplayer1.listName, true, entityplayer1.ping));
+             }
+             // CraftBukkit end
+         }
+@@ -276,7 +267,7 @@ public abstract class PlayerList {
+             EntityPlayer entityplayer1 = (EntityPlayer) this.players.get(i);
+ 
+             if (entityplayer1.getBukkitEntity().canSee(entityplayer.getBukkitEntity())) {
+-                entityplayer1.playerConnection.sendPacket(packet);
++                // entityplayer1.playerConnection.sendPacket(packet);
+             }
+         }
+         // This removes the scoreboard (and player reference) for the specific player in the manager
+@@ -732,7 +723,7 @@ public abstract class PlayerList {
+                 {
+                     if ( splayer.getBukkitEntity().canSee( player.getBukkitEntity() ) )
+                     {
+-                        splayer.playerConnection.sendPacket( packet );
++                        // splayer.playerConnection.sendPacket( packet );
+                     }
+                 }
+                 player.lastPing = player.ping;
+@@ -1081,8 +1072,13 @@ public abstract class PlayerList {
+         }
+     }
+ 
++    public void eventSendAndLog(EntityPlayer p, String s) {
++        this.server.info(s);
++        p.sendMessage(s);
++    }
++
+     public void k(String s) {
+         this.server.info(s);
+-        this.sendAll(new Packet3Chat(s));
++        // this.sendAll(new Packet3Chat(s));
+     }
+ }
+diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
+index 293bd39c0..9d375d361 100644
+--- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
++++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
+@@ -187,8 +187,8 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+             if (entityplayer.playerConnection == null) continue;
+ 
+             if (entityplayer.getBukkitEntity().canSee(this)) {
+-                entityplayer.playerConnection.sendPacket(oldpacket);
+-                entityplayer.playerConnection.sendPacket(packet);
++                // entityplayer.playerConnection.sendPacket(oldpacket);
++                // entityplayer.playerConnection.sendPacket(packet);
+             }
+         }
+     }
+-- 
+2.47.1
+
