@@ -4,8 +4,6 @@
   <img src="kiwi.png"  height=100>
 </p>
 
------------
-
 ## Overview
 
 KwCore is a high-performance CraftBukkit fork with modern optimizations and efficient chunk management. It leverages up-to-date libraries and APIs to enhance stability, performance, and security, laying a strong foundation for future improvements.
