@@ -29,6 +29,7 @@ tasks {
         manifest {
             attributes["Main-Class"] = "org.bukkit.craftbukkit.Main"
         }
+        exclude("org/bouncycastle/**")
     }
     withType<ShadowJar> {
         relocate("org.bouncycastle", "net.minecraft.v${minecraft_version}.org.bouncycastle")
